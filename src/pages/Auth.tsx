@@ -9,11 +9,13 @@ const Auth = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [verifying, setVerifying] = useState(true);
+
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   const sessionId = searchParams.get("session_id");
 
+  // 🔹 STEP 1: Verify payment (anonymous or logged-in)
   useEffect(() => {
     if (!sessionId) {
       toast.error("Please complete payment first");
@@ -22,54 +24,47 @@ const Auth = () => {
     }
 
     const verifyPayment = async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke(
-          "verify-website-payment",
-          {
-            body: { session_id: sessionId },
-          }
-        );
-
-        if (error || data?.status !== "paid") {
-          toast.error("Payment verification failed");
-          navigate("/offer");
-          return;
+      const { data, error } = await supabase.functions.invoke(
+        "verify-website-payment",
+        {
+          body: { session_id: sessionId },
         }
+      );
 
-        setVerifying(false);
-      } catch (err: any) {
-        console.error(err);
+      if (error || data?.status !== "paid") {
         toast.error("Payment verification failed");
         navigate("/offer");
+        return;
       }
+
+      // payment verified (claimed OR unclaimed)
+      setVerifying(false);
     };
 
     verifyPayment();
+  }, [navigate, sessionId]);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+  // 🔹 STEP 2: When user signs in → CLAIM payment
+  useEffect(() => {
+    const { data: { subscription } } =
+      supabase.auth.onAuthStateChange(async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
 
-        if (event === "SIGNED_IN" && session?.user) {
-          // ✅ Claim any unclaimed payments after signup/signin
-          try {
-            const userId = session.user.id;
-            await supabase.functions.invoke("claim-unclaimed-payments", {
-              body: { user_id: userId },
-            });
-          } catch (err) {
-            console.error("Failed to claim payments:", err);
-          }
+        if (event === "SIGNED_IN" && session?.user && sessionId) {
+          // 🔁 Re-verify to CLAIM payment with user_id
+          await supabase.functions.invoke("verify-website-payment", {
+            body: { session_id: sessionId },
+          });
 
           navigate("/");
         }
-      }
-    );
+      });
 
     return () => subscription.unsubscribe();
   }, [navigate, sessionId]);
 
+  // 🔄 Loading state
   if (verifying) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -78,6 +73,7 @@ const Auth = () => {
     );
   }
 
+  // 🔐 Show signup / signin after successful payment
   return <AuthForm />;
 };
 
