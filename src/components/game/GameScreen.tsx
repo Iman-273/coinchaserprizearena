@@ -49,14 +49,16 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
   const [joinWindowEnded, setJoinWindowEnded] = useState(false);
   const [isParticipant, setIsParticipant] = useState(false);
 
+  // Fetch current tournament
   useEffect(() => {
     getCurrentTournament();
   }, []);
 
+  // Check participation
   useEffect(() => {
     if (!currentTournament || !profile) return;
 
-    const check = async () => {
+    const checkParticipation = async () => {
       const { data } = await supabase
         .from("tournament_participants")
         .select("id")
@@ -67,29 +69,32 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
       setIsParticipant(!!data);
     };
 
-    check();
+    checkParticipation();
   }, [currentTournament?.id, profile?.id]);
 
+  // Countdown / Join logic (Mon-Thu join, Mon-Thu play)
   useEffect(() => {
     if (!currentTournament) return;
 
-    const updateCountdown = () => {
-      const now = Date.now();
-      const end = new Date(currentTournament.end_date).getTime();
-      const joinEnd = new Date(currentTournament.join_end_at).getTime();
+    const updateState = () => {
+      const now = new Date().getTime();
+      const startTime = new Date(currentTournament.start_at).getTime();
+      const endTime = new Date(currentTournament.end_date).getTime();
+      const joinEndTime = new Date(currentTournament.join_end_at).getTime();
 
-      const days = Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24)));
-      const joinEnded = now > joinEnd;
-      const canJoinNow =
-        currentTournament.state === "ACTIVE" && !joinEnded && !isParticipant;
+      const canJoinNow = now >= startTime && now <= joinEndTime && !isParticipant;
+      const joinEndedNow = now > joinEndTime;
+      const tournamentActiveNow = now >= startTime && now <= endTime;
 
-      setDaysLeft(prev => (prev !== days ? days : prev));
-      setJoinWindowEnded(prev => (prev !== joinEnded ? joinEnded : prev));
+      const remainingDays = Math.max(0, Math.ceil((endTime - now) / (1000 * 60 * 60 * 24)));
+
+      setDaysLeft(prev => (prev !== remainingDays ? remainingDays : prev));
       setCanJoin(prev => (prev !== canJoinNow ? canJoinNow : prev));
+      setJoinWindowEnded(prev => (prev !== joinEndedNow ? joinEndedNow : prev));
     };
 
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000 * 60 * 60);
+    updateState();
+    const interval = setInterval(updateState, 1000 * 60); // check every minute
     return () => clearInterval(interval);
   }, [currentTournament?.id, isParticipant]);
 
@@ -135,56 +140,24 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
         <p className="text-foreground font-semibold text-lg">Escape the hurdles, collect coins, win prizes!</p>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats */}
       <div className="grid grid-cols-2 gap-4">
         <Card className="bg-red-600 border-2 border-red-700 shadow-lg hover:shadow-xl transition-shadow">
           <CardContent className="p-6 text-center">
-            <div className="bg-red-700/30 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
-              <Calendar className="h-7 w-7 text-white" />
-            </div>
-            <p className="text-4xl font-black text-white mb-1">{currentTournament ? daysLeft : 0}</p>
-            <p className="text-base font-bold text-white">Days Left</p>
-            {currentTournament && daysLeft <= 2 && (
-              <p className="text-xs bg-red-700/50 rounded px-2 py-1 mt-2 font-semibold text-white">
-                Closing Soon!
-              </p>
-            )}
+            <Calendar className="mx-auto mb-2 text-white" />
+            <p className="text-4xl font-black text-white">{currentTournament ? daysLeft : 0}</p>
+            <p className="text-white font-semibold">Days Left</p>
           </CardContent>
         </Card>
 
         <Card className="bg-green-600 border-2 border-green-700 shadow-lg hover:shadow-xl transition-shadow">
           <CardContent className="p-6 text-center">
-            <div className="bg-green-700/30 rounded-full w-14 h-14 flex items-center justify-center mx-auto mb-3">
-              <Users className="h-7 w-7 text-white" />
-            </div>
-            <p className="text-4xl font-black text-white mb-1">{currentTournament?.participants_count || 0}</p>
-            <p className="text-base font-bold text-white">Players</p>
+            <Users className="mx-auto mb-2 text-white" />
+            <p className="text-4xl font-black text-white">{currentTournament?.participants_count || 0}</p>
+            <p className="text-white font-semibold">Players</p>
           </CardContent>
         </Card>
       </div>
-
-      {/* Prize Pool */}
-      {currentTournament && (
-        <Card className="bg-card border-2 border-primary shadow-lg hover:shadow-xl transition-shadow">
-          <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent pb-4 border-b-2 border-primary">
-            <CardTitle className="flex items-center gap-3 text-2xl font-black text-foreground drop-shadow-md">
-              <Trophy className="h-6 w-6" />
-              Prize Pool
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-6 text-center space-y-4">
-            <div className="bg-primary px-6 py-4 rounded-lg border-2 border-primary shadow-md">
-              <p className="text-5xl font-black text-primary-foreground mb-2">${currentTournament.first_prize}</p>
-              <p className="text-lg font-black text-white">🥇 1st Place Winner</p>
-            </div>
-            <div className="bg-primary/20 border-2 border-primary rounded-lg p-4">
-              <p className="text-sm font-semibold text-foreground">
-                Tournament resets every Sunday • Winners by highest score
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Tournament Play */}
       <Card className="bg-card border-2 border-primary shadow-lg hover:shadow-xl transition-shadow">
@@ -195,36 +168,29 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-6 space-y-4">
-          <div className="bg-primary/10 border-2 border-primary rounded-lg p-4">
-            <p className="text-foreground text-base font-semibold">
-              {isParticipant 
-                ? "✓ You're in! 7 days timer. Your total runs count toward the prize!"
-                : joinWindowEnded
-                ? "Join window closed (Mon-Thu). Come back Monday!"
-                : canJoin
-                ? "Join now! 7 days timer. Runs from all games count. Top 3 win prizes!"
-                : currentTournament?.state === 'UPCOMING'
-                ? "Tournament starts Monday! Join: Mon-Thu only"
-                : "Tournament not available for joining"
-              }
-            </p>
-          </div>
-          <Button 
+          <p className="text-foreground text-base font-semibold">
+            {isParticipant
+              ? "✓ You're in! Compete Monday–Thursday."
+              : joinWindowEnded
+              ? "Join window closed (Mon-Wed). Come back next week!"
+              : canJoin
+              ? "Join now! Play Mon-Thu, compete for top scores."
+              : currentTournament?.state === "UPCOMING"
+              ? "Tournament starts Monday. Join: Mon-Wed only."
+              : "Tournament unavailable."}
+          </p>
+
+          <Button
             onClick={() => startGame("tournament")}
-            disabled={!currentTournament || currentTournament.state !== 'ACTIVE'}
-            className="w-full bg-primary text-primary-foreground hover:bg-primary/95 border-2 border-primary shadow-lg hover:shadow-xl font-black text-base py-3 h-auto rounded-lg transition-all active:scale-95 disabled:opacity-50"
+            disabled={!currentTournament || !canJoin && !isParticipant}
+            className="w-full bg-primary text-primary-foreground hover:bg-primary/95 border-2 border-primary shadow-lg hover:shadow-xl font-black text-base py-3 rounded-lg transition-all disabled:opacity-50"
           >
-            {isParticipant ? "Start Tournament Game" : "Join Tournament (50€)"}
+            {isParticipant ? "Start Tournament Game" : "Join Tournament"}
           </Button>
-          {joinWindowEnded && !isParticipant && (
-            <p className="text-xs text-muted-foreground text-center font-semibold">
-              Join: Mon 00:00 - Thu 23:59 (Asia/Karachi)
-            </p>
-          )}
         </CardContent>
       </Card>
 
-      {/* Free Play */}
+     {/* Free Play */}
       <Card className="bg-card border-2 border-primary shadow-lg hover:shadow-xl transition-shadow">
         <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent pb-4 border-b-2 border-primary">
           <CardTitle className="flex items-center gap-3 text-foreground text-2xl font-black">
@@ -247,6 +213,7 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
         </CardContent>
       </Card>
 
+   
       {/* Game Rules */}
       <Card className="bg-card border-2 border-primary shadow-lg hover:shadow-xl transition-shadow">
         <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent pb-4 border-b-2 border-primary">
@@ -264,7 +231,7 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
             </div>
             <div className="flex items-start gap-3 bg-primary/5 p-3 rounded-lg border border-primary">
               <span className="text-lg">🏆</span>
-              <p>Tournament: 7 days timer - Join Mon-Thu, compete until Sunday!</p>
+              <p>Tournament: Join Monday–Wednesday, compete until Thursday!</p>
             </div>
             <div className="flex items-start gap-3 bg-primary/5 p-3 rounded-lg border border-primary">
               <span className="text-lg">📊</span>

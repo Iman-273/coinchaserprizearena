@@ -14,6 +14,7 @@ interface Profile {
 
 interface PremiumAccessBannerProps {
   profile: Profile | null;
+  updateProfile?: (profile: Profile) => void;
 }
 
 export const PremiumAccessBanner = ({ profile }: PremiumAccessBannerProps) => {

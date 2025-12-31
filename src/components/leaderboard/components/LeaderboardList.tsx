@@ -5,12 +5,11 @@ interface LeaderboardEntry {
   rank: number;
   username: string;
   full_name?: string;
-  total_runs: number;
+  best_score: number;
   total_games: number;
   user_id: string;
   tournament_id: string;
-  max_distance_covered?: number;
-  total_distance_covered?: number;
+  total_distance: number;
 }
 
 interface LeaderboardListProps {

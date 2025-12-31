@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 interface EndlessRunnerProps {
   mode: "free" | "tournament";
   profile: any;
+  onUpdateProfile?: (coins: number, winnings?: number) => void;
   onExit: () => void;
 }
 
@@ -25,7 +26,8 @@ const STORAGE_KEYS = {
   tournamentProgress: 'em.tournamentProgress',
 };
 
-const COUNTDOWN_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days
+const COUNTDOWN_DURATION = 10 * 60 * 1000; // 10 minutes
+
 
 export const EndlessRunner = ({ mode, profile, onExit }: EndlessRunnerProps) => {
   const navigate = useNavigate();
@@ -141,43 +143,101 @@ export const EndlessRunner = ({ mode, profile, onExit }: EndlessRunnerProps) => 
     }
   };
 
-  const saveProgress = async () => {
-    const storageKey = mode === 'tournament' ? STORAGE_KEYS.tournamentProgress : STORAGE_KEYS.progress;
-    const progress: GameProgress = {
-      distance,
-      balance,
-      score,
-      tournamentId: currentTournament?.id
+  // Realtime listener: announce winners when inserted for current tournament
+  useEffect(() => {
+    if (mode !== 'tournament' || !currentTournament) return;
+
+    const channel = supabase
+      .channel(`tournament-winners-${currentTournament.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'tournament_winners',
+          filter: `tournament_id=eq.${currentTournament.id}`
+        },
+        (payload: any) => {
+          const newRow = payload?.new;
+          if (!newRow) return;
+          const pos = newRow.position;
+          const uid = newRow.user_id;
+          const prize = newRow.prize_amount;
+
+          if (profile?.id && uid === profile.id && pos <= 3) {
+            toast.success(`🎉 Congrats! You placed #${pos} and won £${prize}`);
+          } else {
+            toast.success(`Tournament winners announced: #${pos} - check leaderboard`);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
-    localStorage.setItem(storageKey, JSON.stringify(progress));
+  }, [mode, currentTournament?.id, profile?.id]);
 
-    // Save tournament progress to database
-    if (mode === 'tournament' && currentTournament && profile) {
-      try {
-        await supabase.rpc('save_tournament_progress', {
-          p_user_id: profile.id,
-          p_tournament_id: currentTournament.id,
-          p_score: score,
-          p_distance: distance,
-          p_coins: balance
-        });
+ const saveProgress = async () => {
+  const storageKey =
+    mode === "tournament"
+      ? STORAGE_KEYS.tournamentProgress
+      : STORAGE_KEYS.progress;
 
-        // Save game score
-        await supabase.from('game_scores').insert({
-          user_id: profile.id,
-          profile_id: profile.id,
-          tournament_id: currentTournament.id,
-          score,
-          coins_collected: balance,
-          distance_covered: distance,
-          game_mode: 'tournament',
-          game_duration: Math.floor((Date.now() - new Date(countdownStartAt!).getTime()) / 1000)
-        });
-      } catch (error) {
-        console.error('Error saving tournament progress:', error);
-      }
-    }
+  const progress: GameProgress = {
+    distance,
+    balance,
+    score,
+    tournamentId: currentTournament?.id,
   };
+
+  localStorage.setItem(storageKey, JSON.stringify(progress));
+
+  // ⛔ HARD GUARDS (VERY IMPORTANT)
+  if (mode !== "tournament") {
+    console.log("[SAVE] Skipped: not tournament mode");
+    return;
+  }
+
+  if (!profile?.id) {
+    console.log("[SAVE] Skipped: profile.id missing", profile);
+    return;
+  }
+
+  if (!currentTournament?.id) {
+    console.log("[SAVE] Skipped: tournament.id missing", currentTournament);
+    return;
+  }
+
+  // 🧪 LOG PAYLOAD
+  const payload = {
+    p_user_id: profile.id,
+    p_tournament_id: currentTournament.id,
+    p_score: score,
+    p_distance: distance,
+    p_coins: balance,
+  };
+
+  console.log("[SAVE] Calling RPC save_tournament_progress with:", payload);
+
+  // ✅ RPC CALL WITH FULL ERROR LOGGING
+  const { data, error } = await supabase.rpc(
+    "save_tournament_progress",
+    payload
+  );
+
+  if (error) {
+    console.error("❌ RPC ERROR:", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
+  } else {
+    console.log("✅ RPC SUCCESS:", data);
+  }
+};
+
 
   const handleSaveAndExit = async () => {
     await saveProgress();

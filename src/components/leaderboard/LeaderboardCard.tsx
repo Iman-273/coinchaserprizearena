@@ -6,12 +6,11 @@ interface LeaderboardEntry {
   rank: number;
   username: string;
   full_name?: string;
-  total_runs: number;
+  best_score: number;
   total_games: number;
   user_id: string;
   tournament_id: string;
-  max_distance_covered?: number;
-  total_distance_covered?: number;
+  total_distance: number;
 }
 
 interface LeaderboardCardProps {
@@ -51,13 +50,13 @@ export const LeaderboardCard = ({ entry, showGames = false, showDistance = false
           </div>
           
           <div className="text-right flex-shrink-0">
-            <p className="text-lg sm:text-2xl font-bold text-black">{entry.total_runs.toLocaleString()}</p>
-            <p className="text-xs sm:text-sm text-black/60">total runs</p>
+            <p className="text-lg sm:text-2xl font-bold text-black">{entry.best_score.toLocaleString()}</p>
+            <p className="text-xs sm:text-sm text-black/60">best score</p>
             
-            {showDistance && entry.max_distance_covered && (
+            {showDistance && entry.total_distance && (
               <div className="flex items-center justify-end gap-1 mt-1">
                 <MapPin className="h-3 w-3 text-foreground" />
-                <p className="text-xs text-black/60">{entry.max_distance_covered}m</p>
+                <p className="text-xs text-black/60">{entry.total_distance.toLocaleString()}m</p>
               </div>
             )}
             

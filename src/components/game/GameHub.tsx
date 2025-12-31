@@ -146,7 +146,7 @@ export const GameHub = ({ session, user }: GameHubProps) => {
         </div>
 
         <div className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 p-6">
-          {activeTab === 'game' && <GameScreen profile={profile} updateProfile={handleProfileUpdate} />}
+          {activeTab === 'game' && <GameScreen profile={profile} />}
           {activeTab === 'leaderboard' && <LeaderboardScreen />}
           {activeTab === 'tournament' && <TournamentScreen profile={profile} updateProfile={handleProfileUpdate} />}
           {activeTab === 'profile' && <ProfileScreen profile={profile} updateProfile={handleUpdateProfile} session={session!} />}

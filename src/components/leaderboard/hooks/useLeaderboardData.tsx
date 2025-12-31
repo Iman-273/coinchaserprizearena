@@ -7,12 +7,11 @@ interface LeaderboardEntry {
   rank: number;
   username: string;
   full_name?: string;
-  total_runs: number;
+  best_score: number;
   total_games: number;
   user_id: string;
   tournament_id: string;
-  max_distance_covered?: number;
-  total_distance_covered?: number;
+  total_distance: number;
 }
 
 interface Tournament {
@@ -171,23 +170,21 @@ export const useLeaderboardData = () => {
         // Process and create leaderboard entries
         const leaderboardEntries = (participants || []).map((participant: any) => {
           const profile = profileMap.get(participant.user_id);
-          const maxDistance = Math.floor(participant.best_score / 10);
 
           return {
             user_id: participant.user_id,
             username: profile?.username || 'Unknown',
             full_name: profile?.full_name || '',
-            total_runs: participant.total_runs || 0,
+            best_score: participant.best_score || 0,
             total_games: participant.total_games || 0,
             tournament_id: tournament.id,
-            max_distance_covered: maxDistance,
-            total_distance_covered: maxDistance,
+            total_distance: participant.total_distance || 0,
             rank: 0
           };
         });
 
-        // Sort by total_runs and add ranks
-        leaderboardEntries.sort((a, b) => b.total_runs - a.total_runs);
+        // Sort by best_score and add ranks
+        leaderboardEntries.sort((a, b) => b.best_score - a.best_score);
         leaderboardEntries.forEach((entry, index) => {
           entry.rank = index + 1;
         });
@@ -223,13 +220,13 @@ export const useLeaderboardData = () => {
       const userBestScores = new Map();
       allTimeData?.forEach((entry: any) => {
         const userId = entry.user_id;
-        if (!userBestScores.has(userId) || userBestScores.get(userId).total_runs < entry.score) {
+        if (!userBestScores.has(userId) || userBestScores.get(userId).best_score < entry.score) {
           userBestScores.set(userId, {
             user_id: userId,
             username: entry.profiles.username,
             full_name: entry.profiles.full_name,
-            total_runs: entry.score, // For all-time, this is the best single game score
-            max_distance_covered: Math.floor(entry.score / 10),
+            best_score: entry.score, // For all-time, this is the best single game score
+            total_distance: Math.floor(entry.score * 10),
             total_games: 1,
             rank: 0,
             tournament_id: ''
@@ -238,7 +235,7 @@ export const useLeaderboardData = () => {
       });
 
       const allTimeArray = Array.from(userBestScores.values())
-        .sort((a, b) => b.total_runs - a.total_runs)
+        .sort((a, b) => b.best_score - a.best_score)
         .map((entry, index) => ({ ...entry, rank: index + 1 }));
 
       setAllTimeLeaders(allTimeArray);

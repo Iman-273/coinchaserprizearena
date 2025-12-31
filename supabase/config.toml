@@ -1,1 +1,5 @@
 project_id = "aeadkssyfynsryusefbr"
+
+[functions.finalize-weekly-tournament]
+verify_jwt = false
+schedule = "* * * * *"

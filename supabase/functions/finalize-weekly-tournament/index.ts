@@ -6,6 +6,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+function getPKTDay(): number {
+  // 0 = Sunday, 1 = Monday ... 6 = Saturday
+  const now = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Karachi" })
+  );
+  return now.getDay();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -18,76 +26,116 @@ serve(async (req) => {
       { auth: { persistSession: false } }
     );
 
-    console.log("Starting weekly tournament finalization (Asia/Karachi)...");
-    
-    const nowPKT = new Date().toLocaleString("en-US", { timeZone: "Asia/Karachi" });
-    console.log(`Current time PKT: ${nowPKT}`);
+    const day = getPKTDay();
+    console.log("PKT weekday:", day); // 1 = Mon ... 4 = Thu
 
-    // Activate any UPCOMING tournaments whose start time has passed
-    const { error: activateError } = await supabaseAdmin.rpc('activate_tournament');
-    if (activateError) {
-      console.error('Failed to activate tournaments:', activateError);
+    /* ===============================
+       MONDAY – WEDNESDAY
+       ACTIVE (play + join)
+    ================================ */
+    if (day >= 1 && day <= 3) {
+      console.log("Setting tournaments to ACTIVE");
+
+      await supabaseAdmin
+        .from("tournaments")
+        .update({ state: "ACTIVE" })
+        .eq("week_key", getCurrentWeekKey())
+        .in("state", ["UPCOMING", "LOCKED"]);
     }
 
-    // Get all ACTIVE tournaments that have ended (based on end_date in PKT)
-    const { data: expiredTournaments, error: tournamentError } = await supabaseAdmin
-      .from('tournaments')
-      .select('*')
-      .eq('state', 'ACTIVE')
-      .lt('end_date', new Date().toISOString());
+    /* ===============================
+       THURSDAY
+       LOCKED (play only)
+    ================================ */
+    if (day === 4) {
+      console.log("Locking tournaments (JOIN CLOSED)");
 
-    if (tournamentError) {
-      throw new Error(`Failed to fetch expired tournaments: ${tournamentError.message}`);
+      await supabaseAdmin
+        .from("tournaments")
+        .update({ state: "LOCKED" })
+        .eq("week_key", getCurrentWeekKey())
+        .eq("state", "ACTIVE");
     }
 
-    console.log(`Found ${expiredTournaments?.length || 0} expired tournaments`);
+    /* ===============================
+       FRIDAY – SUNDAY
+       EXPIRE + FINALIZE
+    ================================ */
+    if (day === 5 || day === 6 || day === 0) {
+      console.log("Finalizing & expiring tournaments");
 
-    // Process each expired tournament
-    for (const tournament of expiredTournaments || []) {
-      console.log(`Processing tournament: ${tournament.name} (${tournament.id})`);
-      
-      const { error: finalizeError } = await supabaseAdmin.rpc('finalize_tournament', {
-        tournament_id: tournament.id
-      });
+      const { data: toExpire } = await supabaseAdmin
+        .from("tournaments")
+        .select("*")
+        .eq("week_key", getCurrentWeekKey())
+        .in("state", ["ACTIVE", "LOCKED"]);
 
-      if (finalizeError) {
-        console.error(`Failed to finalize tournament ${tournament.id}:`, finalizeError);
-        continue;
+      for (const tournament of toExpire || []) {
+        // finalize
+        await supabaseAdmin.rpc("finalize_tournament", {
+          tournament_id: tournament.id,
+        });
+
+        // mark expired
+        await supabaseAdmin
+          .from("tournaments")
+          .update({ state: "EXPIRED" })
+          .eq("id", tournament.id);
+
+        // notify winners
+        const { data: winners } = await supabaseAdmin
+          .from("tournament_winners")
+          .select("user_id, position, prize_amount")
+          .eq("tournament_id", tournament.id)
+          .order("position", { ascending: true })
+          .limit(3);
+
+        if (winners?.length) {
+          const notifications = winners.map((w) => ({
+            user_id: w.user_id,
+            title: `You placed #${w.position} in ${tournament.name}!`,
+            body: `Congratulations — you won £${w.prize_amount}`,
+            link: `/tournament/${tournament.id}`,
+            created_at: new Date().toISOString(),
+            read: false,
+          }));
+
+          await supabaseAdmin.from("notifications").insert(notifications);
+        }
       }
 
-      console.log(`Successfully finalized tournament: ${tournament.name}`);
-    }
-
-    // Create next week's tournament if none exists
-    const { data: tournamentId, error: createError } = await supabaseAdmin.rpc('create_weekly_tournament');
-    
-    if (createError) {
-      console.error('Failed to create weekly tournament:', createError);
-    } else if (tournamentId) {
-      console.log(`Created new tournament: ${tournamentId}`);
-    } else {
-      console.log('Tournament already exists for next week');
+      // create next week tournament
+      await supabaseAdmin.rpc("create_weekly_tournament");
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: `Processed ${expiredTournaments?.length || 0} tournaments`,
-        processed_tournaments: expiredTournaments?.length || 0
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      }
+      JSON.stringify({ success: true, day }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
-    console.error("Error in finalize-weekly-tournament:", error);
+    console.error(error);
     return new Response(
       JSON.stringify({ error: error.message }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      }
+      { headers: corsHeaders, status: 500 }
     );
   }
 });
+
+/* ===============================
+   HELPERS
+================================ */
+
+function getCurrentWeekKey() {
+  const now = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Karachi" })
+  );
+  const year = now.getFullYear();
+
+  const oneJan = new Date(year, 0, 1);
+  const numberOfDays = Math.floor(
+    (now.getTime() - oneJan.getTime()) / (24 * 60 * 60 * 1000)
+  );
+
+  const week = Math.ceil((numberOfDays + oneJan.getDay() + 1) / 7);
+  return `${year}-${week}`;
+}
