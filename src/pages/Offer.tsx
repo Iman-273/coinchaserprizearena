@@ -1,25 +1,42 @@
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useState } from "react";
+import type { User } from "@supabase/supabase-js";
 
 const Offer = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    // Check if user is logged in
+    const checkAuth = async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session?.user) {
+        // Redirect to home if not logged in
+        navigate("/", { replace: true });
+      } else {
+        setUser(data.session.user);
+      }
+    };
+
+    checkAuth();
+  }, [navigate]);
 
   const handleBuyNow = async () => {
     setLoading(true);
 
     try {
-      // ❌ Anonymous payment (no auth required)
       const { data, error } = await supabase.functions.invoke(
         "create-website-payment",
         {
           body: {
             source: "offer_page",
-            // optional: email if user is logged in
+            email: user?.email,
+            userId: user?.id,
           },
         }
       );
@@ -31,7 +48,7 @@ const Offer = () => {
       }
 
       if (data?.url) {
-        // ✅ Redirect to Stripe checkout
+        // Redirect to Stripe checkout
         window.location.href = data.url;
       } else {
         toast.error("No payment URL received");
@@ -76,7 +93,7 @@ const Offer = () => {
             </Button>
 
             <p className="text-sm text-center text-muted-foreground">
-              Secure Stripe payment • Signup after payment
+              Secure Stripe payment • Lifetime access
             </p>
           </CardContent>
         </Card>

@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +11,8 @@ const WebsiteSuccess = () => {
   const navigate = useNavigate();
   const [verifying, setVerifying] = useState(true);
   const [verified, setVerified] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+
   const sessionId = searchParams.get("session_id");
 
   useEffect(() => {
@@ -25,41 +26,41 @@ const WebsiteSuccess = () => {
 
   const verifyPayment = async () => {
     try {
-      console.log("Verifying payment for session:", sessionId);
-      
-      const { data, error } = await supabase.functions.invoke('verify-website-payment', {
-        body: { session_id: sessionId }
-      });
+      console.log("Verifying payment with session_id:", sessionId);
+
+      const { data, error } = await supabase.functions.invoke(
+        "verify-website-payment",
+        { body: { session_id: sessionId } }
+      );
+
+      console.log("Verification response:", { data, error });
 
       if (error) {
-        console.error('Verification error:', error);
-        toast.error(`Payment verification failed: ${error.message}`);
+        console.error("Verification error:", error);
         throw error;
       }
 
-      console.log("Verification response:", data);
+      setPaymentStatus(data?.status);
 
       if (data?.status === "paid") {
         setVerified(true);
-        toast.success("Premium access activated!");
-        
-        // Refresh the page after a delay to ensure the user sees the success message
+        toast.success("Premium access activated! 🎉");
+
+        // Wait 3 seconds then redirect
         setTimeout(() => {
-          window.location.href = "/";
+          console.log("Redirecting to home...");
+          navigate("/", { replace: true });
         }, 3000);
       } else {
-        toast.error("Payment verification failed - payment not completed");
+        console.warn("Payment not marked as paid:", data?.status);
+        toast.error("Payment not completed");
       }
-    } catch (error: any) {
-      console.error('Verification error:', error);
+    } catch (err) {
+      console.error("Verification failed:", err);
       toast.error("Failed to verify payment");
     } finally {
       setVerifying(false);
     }
-  };
-
-  const handleContinue = () => {
-    navigate("/");
   };
 
   if (verifying) {
@@ -67,9 +68,11 @@ const WebsiteSuccess = () => {
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <Card className="w-full max-w-md bg-card border-2 border-primary shadow-xl">
           <CardContent className="p-8 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-4"></div>
-            <p className="text-foreground font-bold">Verifying your payment...</p>
-            <p className="text-muted-foreground text-sm mt-2">This may take a few moments</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mx-auto mb-4" />
+            <p className="font-bold text-foreground">Verifying your payment...</p>
+            <p className="text-muted-foreground text-sm mt-2">
+              This may take a few moments
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -87,38 +90,45 @@ const WebsiteSuccess = () => {
               <Crown className="h-16 w-16 text-red-600" />
             )}
           </div>
-          <CardTitle className={`text-3xl font-black ${
-            verified ? "text-foreground" : "text-red-600"
-          }`}>
-            {verified ? "Welcome to Premium!" : "Payment Verification Failed"}
+
+          <CardTitle
+            className={`text-3xl font-black ${
+              verified ? "text-foreground" : "text-red-600"
+            }`}
+          >
+            {verified
+              ? "Welcome to Premium!"
+              : "Payment Verification Failed"}
           </CardTitle>
         </CardHeader>
+
         <CardContent className="text-center space-y-4">
-          <p className="text-foreground font-semibold">
-            {verified 
-              ? "You now have lifetime access to all Easybucks features including unlimited tournament access!"
-              : "There was an issue processing your payment. Please try again or contact support."
-            }
+          <p className="font-semibold text-foreground">
+            {verified
+              ? "You now have lifetime access to all Easybucks features!"
+              : `There was an issue processing your payment. Status: ${paymentStatus}`}
           </p>
-          
+
           {verified && (
             <div className="bg-primary/10 border-2 border-primary rounded-lg p-4">
-              <h3 className="text-foreground font-black mb-3">✓ Premium Features Unlocked</h3>
-              <ul className="text-foreground text-sm space-y-2">
+              <h3 className="font-black mb-3">
+                ✓ Premium Features Unlocked
+              </h3>
+              <ul className="text-sm space-y-2">
                 <li>• Unlimited tournament access</li>
-                <li>• Join monthly tournaments for £2</li>
-                <li>• Priority customer support</li>
-                <li>• Compete for real money prizes</li>
+                <li>• Monthly paid tournaments</li>
+                <li>• Priority support</li>
+                <li>• Real money prizes</li>
               </ul>
             </div>
           )}
 
-          <Button 
-            onClick={handleContinue}
-            className={`w-full font-black py-3 ${ 
-              verified 
-                ? "bg-primary text-primary-foreground hover:bg-primary/95 border-2 border-primary shadow-lg"
-                : "bg-red-600 text-white hover:bg-red-700 border-2 border-red-700"
+          <Button
+            onClick={() => navigate("/", { replace: true })}
+            className={`w-full font-black py-3 ${
+              verified
+                ? "bg-primary text-primary-foreground"
+                : "bg-red-600 text-white"
             }`}
           >
             {verified ? (

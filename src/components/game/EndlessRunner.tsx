@@ -39,6 +39,10 @@ export const EndlessRunner = ({ mode, profile, onExit }: EndlessRunnerProps) => 
   const [currentTournament, setCurrentTournament] = useState<any>(null);
   const [tournamentLeaders, setTournamentLeaders] = useState<any[]>([]);
   const saveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedBalanceRef = useRef<number>(0);
+  const lastSavedDistanceRef = useRef<number>(0);
+  const lastSavedScoreRef = useRef<number>(0);
+  const lastSaveAtRef = useRef<number>(0);
 
   // Load tournament data if in tournament mode
   useEffect(() => {
@@ -91,18 +95,18 @@ export const EndlessRunner = ({ mode, profile, onExit }: EndlessRunnerProps) => 
     }
   }, [mode, countdownStartAt]);
 
-  // Auto-save progress every 10 seconds
+  // Auto-save progress every 30 seconds (only send deltas/improvements)
   useEffect(() => {
     saveIntervalRef.current = setInterval(() => {
       saveProgress();
-    }, 10000);
+    }, 30000);
 
     return () => {
       if (saveIntervalRef.current) {
         clearInterval(saveIntervalRef.current);
       }
     };
-  }, [balance, distance, score, mode, currentTournament]);
+  }, [mode, currentTournament]);
 
   // Save on unmount
   useEffect(() => {
@@ -210,21 +214,31 @@ export const EndlessRunner = ({ mode, profile, onExit }: EndlessRunnerProps) => 
   }
 
   // 🧪 LOG PAYLOAD
+  // Compute deltas to avoid double-counting on server (server likely adds p_coins)
+  const deltaCoins = Math.max(0, balance - lastSavedBalanceRef.current);
+  const deltaDistance = Math.max(0, distance - lastSavedDistanceRef.current);
+  const improvedScore = Math.max(score, lastSavedScoreRef.current);
+
   const payload = {
     p_user_id: profile.id,
     p_tournament_id: currentTournament.id,
-    p_score: score,
-    p_distance: distance,
-    p_coins: balance,
+    p_score: improvedScore,
+    p_distance: deltaDistance,
+    p_coins: deltaCoins,
   };
 
   console.log("[SAVE] Calling RPC save_tournament_progress with:", payload);
 
   // ✅ RPC CALL WITH FULL ERROR LOGGING
-  const { data, error } = await supabase.rpc(
-    "save_tournament_progress",
-    payload
-  );
+  // Only call RPC when there's something new to save
+  const nowTs = Date.now();
+  const timeSinceLastSave = nowTs - lastSaveAtRef.current;
+  if (deltaCoins === 0 && deltaDistance === 0 && score <= lastSavedScoreRef.current && timeSinceLastSave < 10000) {
+    console.log('[SAVE] Skipped: no new progress to save');
+    return;
+  }
+
+  const { data, error } = await supabase.rpc("save_tournament_progress", payload);
 
   if (error) {
     console.error("❌ RPC ERROR:", {
@@ -235,6 +249,11 @@ export const EndlessRunner = ({ mode, profile, onExit }: EndlessRunnerProps) => 
     });
   } else {
     console.log("✅ RPC SUCCESS:", data);
+    // Update refs to reflect saved state
+    lastSavedBalanceRef.current = balance;
+    lastSavedDistanceRef.current = distance;
+    lastSavedScoreRef.current = score;
+    lastSaveAtRef.current = Date.now();
   }
 };
 

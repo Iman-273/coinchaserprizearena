@@ -67,11 +67,17 @@ export const WithdrawalDialog = ({
         return;
       }
 
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
       const { data, error } = await supabase.functions.invoke('setup-stripe-account', {
         body: {
           routing_number: bankInfo.routingNumber,
           account_number: bankInfo.accountNumber,
           account_holder_name: bankInfo.accountHolderName
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
         }
       });
 
@@ -140,8 +146,14 @@ export const WithdrawalDialog = ({
         return;
       }
 
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
       const { data, error } = await supabase.functions.invoke('process-withdrawal', {
-        body: { amount: withdrawAmount }
+        body: { amount: withdrawAmount },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        }
       });
 
       if (error) {
