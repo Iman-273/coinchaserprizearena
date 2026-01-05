@@ -5,26 +5,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { User, Mail, Lock, UserPlus, LogIn } from "lucide-react";
 
 export const AuthForm = () => {
   const [isLogin, setIsLogin] = useState(true);
+  const [showForgot, setShowForgot] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     username: "",
     fullName: "",
-    gender: ""
+    gender: "",
   });
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData(prev => ({
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    setFormData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     }));
   };
 
+  /* =========================
+     AUTH (LOGIN / SIGNUP)
+  ========================= */
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -33,25 +40,16 @@ export const AuthForm = () => {
       if (isLogin) {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: formData.email,
-          password: formData.password
+          password: formData.password,
         });
-        
+
         if (error) {
-          if (error.message.includes('Invalid login credentials')) {
-            toast.error("Invalid email or password. Please check your credentials and try again.");
-          } else if (error.message.includes('Email not confirmed')) {
-            toast.error("Please check your email and click the confirmation link before signing in.");
-          } else {
-            toast.error(error.message);
-          }
+          toast.error(error.message);
           return;
         }
 
-        if (data.user) {
-          toast.success("Successfully signed in!");
-        }
+        if (data.user) toast.success("Successfully signed in!");
       } else {
-        // Validate form data for signup
         if (!formData.email || !formData.password || !formData.username) {
           toast.error("Please fill in all required fields");
           return;
@@ -70,217 +68,168 @@ export const AuthForm = () => {
             data: {
               username: formData.username,
               full_name: formData.fullName,
-              gender: formData.gender
-            }
-          }
+              gender: formData.gender,
+            },
+          },
         });
-        
+
         if (error) {
-          if (error.message.includes('User already registered')) {
-            toast.error("An account with this email already exists. Please sign in instead.");
-            setIsLogin(true);
-          } else if (error.message.includes('Password should be at least 6 characters')) {
-            toast.error("Password must be at least 6 characters long");
-          } else {
-            toast.error(error.message);
-          }
+          toast.error(error.message);
           return;
         }
 
-        if (data.user) {
-          if (data.user.email_confirmed_at) {
-            toast.success("Account created successfully! You can now sign in.");
-          } else {
-            toast.success("Account created! Please check your email for verification link.");
-          }
-        }
+        if (data.user)
+          toast.success("Account created! Please check your email for verification.");
       }
-    } catch (error: any) {
-      console.error('Auth error:', error);
-      toast.error("Authentication failed. Please try again.");
+    } catch (err) {
+      toast.error("Authentication failed");
     } finally {
       setLoading(false);
     }
   };
 
-  // --- Forgot Password Handler ---
-  const handleForgotPassword = async () => {
-    if (!formData.email) {
-      toast.error("Please enter your email first");
+  /* =========================
+     FORGOT PASSWORD
+  ========================= */
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail) {
+      toast.error("Please enter your email");
       return;
     }
 
-    try {
-      const { data, error } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: `${window.location.origin}/reset-password` // Optional: custom reset page
-      });
+    setLoading(true);
 
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
 
-      toast.success("Password reset email sent! Please check your inbox.");
-    } catch (err: any) {
-      console.error("Forgot password error:", err);
-      toast.error("Something went wrong. Please try again.");
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Password reset link sent! Check your email.");
+      setShowForgot(false);
+      setForgotEmail("");
     }
+
+    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 space-y-8">
-      {/* Hero Section */}
-      <div className="text-center max-w-2xl space-y-4">
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-foreground drop-shadow-lg">
-          Easybucks Tournament
-        </h1>
-        <p className="text-xl sm:text-2xl text-foreground font-bold leading-relaxed drop-shadow-md">
-          Welcome to the ultimate Easybucks experience! Play for free or join tournaments to compete for real money prizes.
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 space-y-8 bg-gray-50">
+      {/* HERO */}
+      <div className="text-center max-w-2xl space-y-2">
+        <h1 className="text-5xl font-black text-gray-900">Easybucks Tournament</h1>
+        <p className="text-lg font-semibold text-gray-700">
+          Compete, win, and withdraw your rewards securely.
         </p>
       </div>
 
-      <Card className="w-full max-w-md bg-card border-2 border-border">
+      <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-card-foreground">
-            {isLogin ? "Welcome back!" : "Join the competition!"}
+          <CardTitle className="text-2xl font-bold">
+            {showForgot ? "Reset Password" : isLogin ? "Welcome back!" : "Create an account"}
           </CardTitle>
         </CardHeader>
+
         <CardContent>
-          <form onSubmit={handleAuth} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-card-foreground">Email *</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-blue-300" />
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  required
-                  value={formData.email}
-                  onChange={handleInputChange}
-                  className="pl-10 bg-white text-foreground border border-border placeholder:text-muted-foreground"
-                  placeholder="Enter your email"
-                />
-              </div>
-            </div>
+          {/* ================= FORGOT PASSWORD FORM ================= */}
+          {showForgot ? (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                required
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                placeholder="Enter your email"
+              />
 
-            {!isLogin && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="username" className="text-card-foreground">Username *</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-3 h-4 w-4 text-blue-300" />
-                    <Input
-                      id="username"
-                      name="username"
-                      type="text"
-                      required
-                      value={formData.username}
-                      onChange={handleInputChange}
-                      className="pl-10 bg-white text-foreground border border-border placeholder:text-muted-foreground"
-                      placeholder="Choose a username"
-                    />
-                  </div>
-                </div>
+              <Button type="submit" disabled={loading} className="w-full">
+                {loading ? "Sending..." : "Send reset link"}
+              </Button>
 
-                <div className="space-y-2">
-                  <Label htmlFor="fullName" className="text-card-foreground">Full Name</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => setShowForgot(false)}
+              >
+                Back to login
+              </Button>
+            </form>
+          ) : (
+            /* ================= LOGIN / SIGNUP FORM ================= */
+            <form onSubmit={handleAuth} className="space-y-4">
+              {/* EMAIL */}
+              <Label>Email</Label>
+              <Input
+                name="email"
+                type="email"
+                required
+                value={formData.email}
+                onChange={handleInputChange}
+              />
+
+              {/* SIGNUP EXTRA FIELDS */}
+              {!isLogin && (
+                <>
+                  <Label>Username</Label>
                   <Input
-                    id="fullName"
+                    name="username"
+                    required
+                    value={formData.username}
+                    onChange={handleInputChange}
+                  />
+
+                  <Label>Full Name</Label>
+                  <Input
                     name="fullName"
-                    type="text"
                     value={formData.fullName}
                     onChange={handleInputChange}
-                    className="bg-white text-foreground border border-border placeholder:text-muted-foreground"
-                    placeholder="Enter your full name"
                   />
-                </div>
+                </>
+              )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="gender" className="text-card-foreground">Gender (Optional)</Label>
-                  <select
-                    id="gender"
-                    name="gender"
-                    value={formData.gender}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 bg-white border border-border rounded-md text-foreground"
-                  >
-                    <option value="" className="text-black">Select gender</option>
-                    <option value="male" className="text-black">Male</option>
-                    <option value="female" className="text-black">Female</option>
-                    <option value="other" className="text-black">Other</option>
-                    <option value="prefer_not_to_say" className="text-black">Prefer not to say</option>
-                  </select>
-                </div>
-              </>
-            )}
+              {/* PASSWORD */}
+              <Label>Password</Label>
+              <Input
+                name="password"
+                type="password"
+                required
+                minLength={6}
+                value={formData.password}
+                onChange={handleInputChange}
+              />
 
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-card-foreground">
-                Password {!isLogin && <span className="text-red-400">* (min 6 characters)</span>}
-              </Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-blue-300" />
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  required
-                  minLength={6}
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  className="pl-10 bg-white text-foreground border border-border placeholder:text-muted-foreground"
-                  placeholder="Enter your password"
-                />
-              </div>
+              <Button type="submit" disabled={loading} className="w-full">
+                {loading ? "Processing..." : isLogin ? "Sign In" : "Create Account"}
+              </Button>
 
-              {/* --- Forgot Password Link --- */}
+              {/* FORGOT PASSWORD */}
               {isLogin && (
-                <div className="text-right mt-1">
-                  <Button
-                    variant="link"
-                    onClick={handleForgotPassword}
-                    className="text-sm text-blue-500 hover:underline focus:outline-none"
-                  >
-                    Forgot Password?
-                  </Button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(true)}
+                  className="text-sm text-blue-500 underline w-full mt-1"
+                >
+                  Forgot password?
+                </button>
               )}
-            </div>
+            </form>
+          )}
 
-            <Button 
-              type="submit" 
-              disabled={loading}
-              className="w-full font-bold text-lg h-12"
-            >
-              {loading ? (
-                "Processing..."
-              ) : isLogin ? (
-                <>
-                  <LogIn className="mr-2 h-4 w-4" />
-                  Sign In
-                </>
-              ) : (
-                <>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Create Account
-                </>
-              )}
-            </Button>
-          </form>
-
-          <div className="mt-6 text-center">
+          {/* TOGGLE LOGIN / SIGNUP */}
+          {!showForgot && (
             <Button
               variant="ghost"
+              className="w-full mt-4"
               onClick={() => setIsLogin(!isLogin)}
-              className="bg-transparent text-card-foreground hover:bg-black hover:text-primary-foreground focus:outline-none focus:ring-0 active:bg-black active:text-primary-foreground transition-colors rounded-md px-3 py-2"
             >
-              {isLogin 
-                ? "Don't have an account? Sign up" 
-                : "Already have an account? Sign in"
-              }
+              {isLogin
+                ? "Don't have an account? Sign up"
+                : "Already have an account? Sign in"}
             </Button>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>
