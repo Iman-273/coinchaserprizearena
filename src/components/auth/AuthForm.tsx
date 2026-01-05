@@ -103,29 +103,27 @@ export const AuthForm = () => {
     }
   };
 
+  // --- Forgot Password Handler ---
   const handleForgotPassword = async () => {
     if (!formData.email) {
-      toast.error("Please enter your email to reset password");
+      toast.error("Please enter your email first");
       return;
     }
 
-    setLoading(true);
     try {
-      const { data, error } = await supabase.auth.resetPasswordForEmail({
-        email: formData.email,
-        options: { emailRedirectTo: `${window.location.origin}/reset-password` },
+      const { data, error } = await supabase.auth.resetPasswordForEmail(formData.email, {
+        redirectTo: `${window.location.origin}/reset-password` // Optional: custom reset page
       });
 
       if (error) {
         toast.error(error.message);
-      } else {
-        toast.success("Password reset email sent. Check your inbox.");
+        return;
       }
+
+      toast.success("Password reset email sent! Please check your inbox.");
     } catch (err: any) {
-      console.error("Reset password error:", err);
-      toast.error("Failed to send reset email. Please try again.");
-    } finally {
-      setLoading(false);
+      console.error("Forgot password error:", err);
+      toast.error("Something went wrong. Please try again.");
     }
   };
 
@@ -235,19 +233,21 @@ export const AuthForm = () => {
                   placeholder="Enter your password"
                 />
               </div>
+
+              {/* --- Forgot Password Link --- */}
               {isLogin && (
-                <div className="text-right mt-2">
+                <div className="text-right mt-1">
                   <Button
-                    variant="ghost"
+                    variant="link"
                     onClick={handleForgotPassword}
-                    disabled={loading}
-                    className="text-sm px-2 py-1"
+                    className="text-sm text-blue-500 hover:underline focus:outline-none"
                   >
-                    Forgot password?
+                    Forgot Password?
                   </Button>
                 </div>
               )}
             </div>
+
             <Button 
               type="submit" 
               disabled={loading}

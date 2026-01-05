@@ -1,120 +1,79 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
-import { Lock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
-const ResetPassword = () => {
-  const navigate = useNavigate();
-
+export default function ResetPasswordPage() {
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
 
-  // Supabase session check and proper cleanup
+  // Get the access token from the URL
   useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") {
-        console.log("Password recovery session active");
-      }
-    });
-
-    return () => {
-      data?.subscription?.unsubscribe();
-    };
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get("access_token");
+    setAccessToken(token);
   }, []);
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters");
+  const handleReset = async () => {
+    if (!password) {
+      toast.error("Please enter a new password");
       return;
     }
-
-    if (password !== confirmPassword) {
-      toast.error("Passwords do not match");
+    if (!accessToken) {
+      toast.error("Invalid reset link");
       return;
     }
 
     setLoading(true);
 
-    const { error } = await supabase.auth.updateUser({
-      password,
-    });
+    try {
+      // Use Supabase updateUser with the token from the URL
+      const { data, error } = await supabase.auth.updateUser({
+        password,
+        // The session automatically uses access_token from the URL
+      });
 
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success("Password updated successfully!");
-      navigate("/"); // redirect to login
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+
+      toast.success("Password updated successfully! You can now sign in.");
+      setPassword("");
+    } catch (err: any) {
+      console.error("Reset password error:", err);
+      toast.error("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 space-y-8">
-      <div className="text-center max-w-2xl space-y-4">
-        <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-foreground drop-shadow-lg">
-          Easybucks Tournament
-        </h1>
-        <p className="text-xl sm:text-2xl text-foreground font-bold leading-relaxed drop-shadow-md">
-          Reset your password and get back in the game.
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-md p-6 border rounded-md bg-card space-y-4">
+        <h2 className="text-xl font-bold text-card-foreground">Reset Password</h2>
+        <p className="text-card-foreground text-sm">
+          Enter your new password below to reset your account password.
         </p>
+
+        <Input
+          type="password"
+          placeholder="New password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="bg-white text-foreground border border-border"
+        />
+
+        <Button
+          onClick={handleReset}
+          disabled={loading}
+          className="w-full font-bold text-lg"
+        >
+          {loading ? "Updating..." : "Reset Password"}
+        </Button>
       </div>
-
-      <Card className="w-full max-w-md bg-card border-2 border-border">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-card-foreground">
-            Reset Your Password
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent>
-          <form onSubmit={handleResetPassword} className="space-y-4">
-            <div className="space-y-2">
-              <Label className="text-card-foreground">New Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-blue-300" />
-                <Input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter new password"
-                  className="pl-10 bg-white text-foreground border border-border placeholder:text-muted-foreground"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-card-foreground">Confirm Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-blue-300" />
-                <Input
-                  type="password"
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirm new password"
-                  className="pl-10 bg-white text-foreground border border-border placeholder:text-muted-foreground"
-                />
-              </div>
-            </div>
-
-            <Button type="submit" className="w-full font-bold text-lg h-12" disabled={loading}>
-              {loading ? "Updating..." : "Update Password"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
     </div>
   );
-};
-
-export default ResetPassword;
+}
