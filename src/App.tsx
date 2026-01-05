@@ -10,7 +10,7 @@ import Play from "./pages/Play";
 import TournamentSuccess from "./pages/TournamentSuccess";
 import WebsiteSuccess from "./pages/WebsiteSuccess";
 import NotFound from "./pages/NotFound";
-
+import ResetPassword from "./pages/ResetPassword";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -25,6 +25,7 @@ const App = () => (
           <Route path="/play" element={<Play />} />
           <Route path="/tournament-success" element={<TournamentSuccess />} />
           <Route path="/website-success" element={<WebsiteSuccess />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
