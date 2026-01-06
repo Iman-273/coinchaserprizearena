@@ -30,10 +30,12 @@ interface Profile {
 }
 
 export const GameHub = ({ session, user }: GameHubProps) => {
-  const [activeTab, setActiveTab] = useState<'game' | 'leaderboard' | 'tournament' | 'profile'>('game');
+  const [activeTab, setActiveTab] =
+    useState<"game" | "leaderboard" | "tournament" | "profile">("game");
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  /* ================= FETCH OR CREATE PROFILE ================= */
   const fetchProfile = async () => {
     if (!user) {
       setLoading(false);
@@ -41,46 +43,49 @@ export const GameHub = ({ session, user }: GameHubProps) => {
     }
 
     try {
-      console.log('Fetching profile for user:', user.id);
       const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
         .single();
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          console.log('Profile not found, creating new profile');
-          // Try to create profile if it doesn't exist
+        // Profile not found, create new
+        if (error.code === "PGRST116") {
           const { data: newProfile, error: createError } = await supabase
-            .from('profiles')
+            .from("profiles")
             .insert({
               id: user.id,
-              username: user.user_metadata?.username || user.email?.split('@')[0] || 'User',
-              email: user.email || '',
-              full_name: user.user_metadata?.full_name || '',
+              username:
+                user.user_metadata?.username ||
+                user.email?.split("@")[0] ||
+                "User",
+              email: user.email || "",
+              full_name: user.user_metadata?.full_name || "",
+              total_coins: 0,
+              total_winnings: 0,
+              total_spent: 0,
+              tournament_active: false,
             })
             .select()
             .single();
 
           if (createError) {
-            console.error('Error creating profile:', createError);
-            toast.error('Failed to create user profile');
+            console.error("Error creating profile:", createError);
+            toast.error("Failed to create user profile");
           } else {
-            console.log('Profile created successfully:', newProfile);
             setProfile(newProfile);
           }
         } else {
-          console.error('Error fetching profile:', error);
-          toast.error('Failed to load user profile');
+          console.error("Error fetching profile:", error);
+          toast.error("Failed to load user profile");
         }
       } else {
-        console.log('Profile loaded successfully:', data);
         setProfile(data);
       }
-    } catch (error) {
-      console.error('Profile fetch error:', error);
-      toast.error('Failed to load profile');
+    } catch (err) {
+      console.error("Profile fetch error:", err);
+      toast.error("Failed to load profile");
     } finally {
       setLoading(false);
     }
@@ -88,27 +93,32 @@ export const GameHub = ({ session, user }: GameHubProps) => {
 
   useEffect(() => {
     fetchProfile();
-  }, [user]);
+  }, [user?.id]);
 
+  /* ================= UPDATE PROFILE ================= */
   const handleUpdateProfile = async (updatedProfile: Profile) => {
+    if (!user) return;
+
     try {
       setLoading(true);
+
+      const { id, created_at, ...safeProfile } = updatedProfile;
+
       const { error } = await supabase
-        .from('profiles')
-        .update(updatedProfile)
-        .eq('id', user?.id);
+        .from("profiles")
+        .update(safeProfile)
+        .eq("id", user.id);
 
       if (error) {
-        console.error('Error updating profile:', error);
-        toast.error('Failed to update profile');
+        console.error("Error updating profile:", error);
+        toast.error("Failed to update profile");
       } else {
-        console.log('Profile updated successfully:', updatedProfile);
         setProfile(updatedProfile);
-        toast.success('Profile updated successfully!');
+        toast.success("Profile updated successfully!");
       }
-    } catch (error) {
-      console.error('Profile update error:', error);
-      toast.error('Failed to update profile');
+    } catch (err) {
+      console.error("Profile update error:", err);
+      toast.error("Failed to update profile");
     } finally {
       setLoading(false);
     }
@@ -118,6 +128,7 @@ export const GameHub = ({ session, user }: GameHubProps) => {
     setProfile(updatedProfile);
   };
 
+  /* ================= LOADING STATE ================= */
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -129,27 +140,48 @@ export const GameHub = ({ session, user }: GameHubProps) => {
     );
   }
 
+  /* ================= MAIN UI ================= */
   return (
     <div className="min-h-screen">
       <div className="container mx-auto px-4 py-8">
         <div className="flex flex-col items-center mb-8">
-          <h1 className="text-4xl font-bold text-black mb-4">Easybucks Tournament</h1>
+          <h1 className="text-4xl font-bold text-black mb-4">
+            Easybucks Tournament
+          </h1>
           <p className="text-muted-foreground text-center max-w-2xl">
-            Welcome to the ultimate Easybucks experience! Play for free or join tournaments to compete for real money prizes.
+            Welcome to the ultimate Easybucks experience! Play for free or join
+            tournaments to compete for real money prizes.
           </p>
         </div>
 
-        <PremiumAccessBanner profile={profile} updateProfile={handleProfileUpdate} />
+        <PremiumAccessBanner
+          profile={profile}
+          updateProfile={handleProfileUpdate}
+        />
 
         <div className="mb-8">
-          <BottomNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
+          <BottomNavigation
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+          />
         </div>
 
         <div className="bg-white/10 backdrop-blur-sm rounded-lg border border-white/20 p-6">
-          {activeTab === 'game' && <GameScreen profile={profile} />}
-          {activeTab === 'leaderboard' && <LeaderboardScreen />}
-          {activeTab === 'tournament' && <TournamentScreen profile={profile} updateProfile={handleProfileUpdate} />}
-          {activeTab === 'profile' && <ProfileScreen profile={profile} updateProfile={handleUpdateProfile} session={session!} />}
+          {activeTab === "game" && <GameScreen profile={profile} />}
+          {activeTab === "leaderboard" && <LeaderboardScreen />}
+          {activeTab === "tournament" && (
+            <TournamentScreen
+              profile={profile}
+              updateProfile={handleProfileUpdate}
+            />
+          )}
+          {activeTab === "profile" && session && (
+            <ProfileScreen
+              profile={profile}
+              updateProfile={handleUpdateProfile}
+              session={session}
+            />
+          )}
         </div>
       </div>
     </div>

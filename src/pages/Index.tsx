@@ -16,6 +16,7 @@ const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const navigate = useNavigate();
 
@@ -69,22 +70,43 @@ const Index = () => {
   // 🔹 FIXED profile fetch
   const fetchProfile = async (userId: string) => {
     setLoading(true);
+    setFetchError(null);
+    console.log("[fetchProfile] Starting for userId:", userId);
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, has_website_access")
-      .eq("id", userId)
-      .maybeSingle<Profile>(); // ✅ THIS FIXES THE ERROR
+    try {
+      // Race between fetch and 10s timeout
+      const result = await Promise.race<Profile | null>([
+        (async () => {
+          const { data, error } = await supabase
+            .from("profiles")
+            .select("id, has_website_access")
+            .eq("id", userId)
+            .maybeSingle<Profile>();
 
-    if (error) {
-      console.error("Profile fetch error:", error);
+          if (error) {
+            console.error("[fetchProfile] Supabase error:", error);
+            throw error;
+          }
+          console.log("[fetchProfile] Success:", data);
+          return data ?? null;
+        })(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => {
+            const err = new Error("Profile fetch timeout (10s)");
+            console.error("[fetchProfile] Timeout error:", err);
+            reject(err);
+          }, 10000)
+        ),
+      ]);
+
+      setProfile(result);
+    } catch (err: any) {
+      console.error("[fetchProfile] Caught error:", err);
       setProfile(null);
+      setFetchError(err?.message || "Failed to load profile");
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setProfile(data ?? null);
-    setLoading(false);
   };
 
   // 🔹 Redirect logic
@@ -101,6 +123,25 @@ const Index = () => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4" />
           <p className="text-white">Loading Easybucks Tournament...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔹 Error UI with Retry
+  if (fetchError && user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center max-w-sm mx-auto p-6">
+          <div className="text-red-400 text-4xl mb-4">⚠️</div>
+          <p className="text-white text-lg font-semibold mb-2">Oops!</p>
+          <p className="text-gray-300 text-sm mb-6">{fetchError}</p>
+          <button
+            onClick={() => user && fetchProfile(user.id)}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
