@@ -22,7 +22,7 @@ interface Tournament {
   id: string;
   name: string;
   week_key: string;
-  state: "UPCOMING" | "ACTIVE" | "LOCKING" | "PAID_OUT" | "ARCHIVED";
+  state: "UPCOMING" | "ACTIVE" | "LOCKING" | "PAID_OUT" | "ARCHIVED" | "EXPIRED";
   start_at: string;
   end_date: string;
   join_start_at: string;
@@ -40,10 +40,7 @@ interface GameScreenProps {
 export const GameScreen = ({ profile }: GameScreenProps) => {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameMode, setGameMode] = useState<"free" | "tournament">("free");
-
-  const [currentTournament, setCurrentTournament] =
-    useState<Tournament | null>(null);
-
+  const [currentTournament, setCurrentTournament] = useState<Tournament | null>(null);
   const [daysLeft, setDaysLeft] = useState(0);
   const [canJoin, setCanJoin] = useState(false);
   const [joinWindowEnded, setJoinWindowEnded] = useState(false);
@@ -55,13 +52,13 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
   }, []);
 
   const fetchCurrentTournament = async () => {
-    const { data, error } = await supabase
-      .from("tournaments")
-      .select("*")
-      .in("state", ["ACTIVE", "UPCOMING"])
-      .order("start_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+const { data, error } = await supabase
+  .from("tournaments")
+  .select("*")
+  .in("state", ["ACTIVE", "UPCOMING", "EXPIRED"] as any[]) // ✅ cast to any[]
+  .order("start_at", { ascending: true })
+  .limit(1)
+  .maybeSingle();
 
     if (error || !data) {
       setCurrentTournament(null);
@@ -99,18 +96,34 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
     if (!currentTournament) return;
 
     const updateState = () => {
-      const now = Date.now();
+      const now = new Date();
       const start = new Date(currentTournament.start_at).getTime();
       const end = new Date(currentTournament.end_date).getTime();
       const joinEnd = new Date(currentTournament.join_end_at).getTime();
 
-      setCanJoin(now >= start && now <= joinEnd && !isParticipant);
-      setJoinWindowEnded(now > joinEnd);
-      setDaysLeft(Math.max(0, Math.ceil((end - now) / 86400000)));
+      const day = now.getDay(); // 0 = Sunday ... 6 = Saturday
+
+      // Special Tuesday tournament handling
+      if (day === 2) {
+        const tuesdayStart = new Date(now);
+        tuesdayStart.setHours(18, 0, 0, 0);
+        const tuesdayEnd = new Date(tuesdayStart.getTime() + 30 * 60 * 1000); // 6:30 PM
+        const tuesdayResult = new Date(tuesdayEnd.getTime() + 10 * 60 * 1000); // 6:40 PM
+
+        setCanJoin(now.getTime() >= tuesdayStart.getTime() && now.getTime() <= tuesdayEnd.getTime() && !isParticipant);
+        setJoinWindowEnded(now.getTime() > tuesdayEnd.getTime());
+        setDaysLeft(now.getTime() > tuesdayResult.getTime() ? 0 : 1);
+        return;
+      }
+
+      // Regular tournament logic
+      setCanJoin(now.getTime() >= start && now.getTime() <= joinEnd && !isParticipant);
+      setJoinWindowEnded(now.getTime() > joinEnd);
+      setDaysLeft(Math.max(0, Math.ceil((end - now.getTime()) / 86400000)));
     };
 
     updateState();
-    const timer = setInterval(updateState, 60000);
+    const timer = setInterval(updateState, 10000); // update every 10s for better accuracy
     return () => clearInterval(timer);
   }, [currentTournament, isParticipant]);
 
@@ -166,8 +179,7 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
     );
   }
 
-  const canPlayTournament =
-    currentTournament && (canJoin || isParticipant);
+  const canPlayTournament = currentTournament && (canJoin || isParticipant);
 
   /* ================= UI ================= */
   return (
@@ -209,7 +221,7 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
         <CardContent className="space-y-4">
           <p className="font-semibold">
             {isParticipant
-              ? "✓ You're in! Compete Monday–Thursday."
+              ? "✓ You're in! Compete now."
               : joinWindowEnded
               ? "Join window closed."
               : canJoin
@@ -240,7 +252,6 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
           </Button>
         </CardContent>
       </Card>
- 
 
       {/* Game Rules */}
       <Card className="bg-card border-2 border-primary shadow-lg hover:shadow-xl transition-shadow">
@@ -259,7 +270,9 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
             </div>
             <div className="flex items-start gap-3 bg-primary/5 p-3 rounded-lg border border-primary">
               <span className="text-lg">🏆</span>
-              <p>Tournament: Join Monday–Wednesday, compete until Thursday!</p>
+              <p>
+                Tournament: Join Monday–Wednesday (or Tuesday 6:00–6:30 PM), compete until Thursday!
+              </p>
             </div>
             <div className="flex items-start gap-3 bg-primary/5 p-3 rounded-lg border border-primary">
               <span className="text-lg">📊</span>
