@@ -47,16 +47,6 @@ export const AuthForm = () => {
         return;
       }
 
-      // Trigger custom reset email via send-email function
-      const resetToken = Math.random().toString(36).substring(2, 15);
-      await supabase.functions.invoke("send-email", {
-        body: {
-          email: formData.email,
-          type: "reset",
-          token: resetToken
-        }
-      });
-
       toast.success("Password reset email sent. Check your inbox.");
     } catch {
       toast.error("Failed to send reset email. Try again.");
@@ -129,18 +119,6 @@ export const AuthForm = () => {
           if (data.user.email_confirmed_at) {
             toast.success("Account created successfully! You can now sign in.");
           } else {
-            // Trigger custom verification email via send-email function
-            const verificationToken = Math.random().toString(36).substring(2, 15);
-            await supabase.functions.invoke("send-email", {
-              body: {
-                email: formData.email,
-                type: "verify",
-                token: verificationToken
-              }
-            }).catch(err => {
-              console.error("Failed to send verification email:", err);
-            });
-            
             toast.success("Account created! Please check your email for verification link.");
           }
         }
