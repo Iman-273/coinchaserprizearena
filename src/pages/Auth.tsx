@@ -30,8 +30,7 @@ const Auth = () => {
 
     // 👉 Normal auth flow must have payment session
     if (!sessionId) {
-      toast.error("Please complete payment first");
-      navigate("/offer");
+      navigate("/offer", { replace: true });
       return;
     }
 
@@ -45,7 +44,7 @@ const Auth = () => {
 
       if (error || data?.status !== "paid") {
         toast.error("Payment verification failed");
-        navigate("/offer");
+        navigate("/offer", { replace: true });
         return;
       }
 
@@ -65,13 +64,16 @@ const Auth = () => {
       setSession(session);
       setUser(session?.user ?? null);
 
-      // 👉 Only claim payment in payment flow
-      if (event === "SIGNED_IN" && session?.user && sessionId && !isEmailFlow) {
-        await supabase.functions.invoke("verify-website-payment", {
-          body: { session_id: sessionId },
-        });
+      if (event === "SIGNED_IN" && session?.user) {
+        // 👉 In payment flow: claim payment first
+        if (sessionId && !isEmailFlow) {
+          await supabase.functions.invoke("verify-website-payment", {
+            body: { session_id: sessionId },
+          });
+        }
 
-        navigate("/");
+        // 👉 Redirect to home after sign-in (both email flow and payment flow)
+        navigate("/", { replace: true });
       }
     });
 
