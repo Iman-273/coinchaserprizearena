@@ -20,7 +20,8 @@ const Index = () => {
 
   const navigate = useNavigate();
 
-  // 🔹 Initial auth + session
+  /* ================= INIT AUTH ================= */
+
   useEffect(() => {
     let mounted = true;
 
@@ -31,6 +32,7 @@ const Index = () => {
       if (error) console.error(error);
 
       const currentUser = data.session?.user ?? null;
+
       setSession(data.session);
       setUser(currentUser);
 
@@ -46,6 +48,8 @@ const Index = () => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -55,7 +59,6 @@ const Index = () => {
       }
 
       if (event === "SIGNED_OUT") {
-        toast.success("Signed out successfully!");
         setProfile(null);
         setLoading(false);
       }
@@ -65,16 +68,15 @@ const Index = () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [navigate]);
+  }, []);
 
-  // 🔹 FIXED profile fetch
+  /* ================= PROFILE FETCH ================= */
+
   const fetchProfile = async (userId: string) => {
     setLoading(true);
     setFetchError(null);
-    console.log("[fetchProfile] Starting for userId:", userId);
 
     try {
-      // Race between fetch and 10s timeout
       const result = await Promise.race<Profile | null>([
         (async () => {
           const { data, error } = await supabase
@@ -83,25 +85,19 @@ const Index = () => {
             .eq("id", userId)
             .maybeSingle<Profile>();
 
-          if (error) {
-            console.error("[fetchProfile] Supabase error:", error);
-            throw error;
-          }
-          console.log("[fetchProfile] Success:", data);
+          if (error) throw error;
+
           return data ?? null;
         })(),
+
         new Promise<never>((_, reject) =>
-          setTimeout(() => {
-            const err = new Error("Profile fetch timeout (10s)");
-            console.error("[fetchProfile] Timeout error:", err);
-            reject(err);
-          }, 10000)
+          setTimeout(() => reject(new Error("Profile fetch timeout")), 10000)
         ),
       ]);
 
       setProfile(result);
     } catch (err: any) {
-      console.error("[fetchProfile] Caught error:", err);
+      console.error("[fetchProfile]", err);
       setProfile(null);
       setFetchError(err?.message || "Failed to load profile");
     } finally {
@@ -109,14 +105,18 @@ const Index = () => {
     }
   };
 
-  // 🔹 Redirect logic - only send to offer after sign-in, not after sign-up
-  useEffect(() => {
-    if (user && profile && !profile.has_website_access) {
-      navigate("/offer", { replace: true });
-    }
-  }, [user, profile, navigate]);
+  /* ================= REDIRECT (NO FLASH) ================= */
 
-  // 🔹 Loading UI
+  useEffect(() => {
+    if (!loading && user && profile) {
+      if (!profile.has_website_access) {
+        navigate("/offer", { replace: true });
+      }
+    }
+  }, [loading, user, profile, navigate]);
+
+  /* ================= LOADING ================= */
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -128,7 +128,8 @@ const Index = () => {
     );
   }
 
-  // 🔹 Error UI with Retry
+  /* ================= ERROR ================= */
+
   if (fetchError && user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -147,11 +148,17 @@ const Index = () => {
     );
   }
 
+  /* ================= AUTH ================= */
+
   if (!user) return <AuthForm />;
 
-  if (user && profile && !profile.has_website_access) {
+  /* ================= BLOCK RENDER WHILE REDIRECTING ================= */
+
+  if (!loading && user && profile && !profile.has_website_access) {
     return null;
   }
+
+  /* ================= MAIN APP ================= */
 
   return <GameHub session={session!} user={user} />;
 };
