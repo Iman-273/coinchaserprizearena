@@ -94,7 +94,7 @@ export const AuthForm = () => {
           email: formData.email,
           password: formData.password,
           options: {
-            emailRedirectTo: `${window.location.origin}/`,
+            emailRedirectTo: `${window.location.origin}/auth`,
             data: {
               username: formData.username,
               full_name: formData.fullName,
