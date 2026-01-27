@@ -109,7 +109,7 @@ const Index = () => {
     }
   };
 
-  // 🔹 Redirect logic
+  // 🔹 Redirect logic - only send to offer after sign-in, not after sign-up
   useEffect(() => {
     if (user && profile && !profile.has_website_access) {
       navigate("/offer", { replace: true });
