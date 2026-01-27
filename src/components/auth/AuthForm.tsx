@@ -94,7 +94,7 @@ export const AuthForm = () => {
           email: formData.email,
           password: formData.password,
           options: {
-            emailRedirectTo: `${window.location.origin}/?showSignin=true`,
+            emailRedirectTo: `${window.location.origin}/`,
             data: {
               username: formData.username,
               full_name: formData.fullName,
@@ -118,9 +118,19 @@ export const AuthForm = () => {
         if (data.user) {
           if (data.user.email_confirmed_at) {
             toast.success("Account created successfully! You can now sign in.");
+            setIsLogin(true);
           } else {
-            toast.success("Account created! Please check your email for verification link.");
+            toast.success("Account created! Please check your email for verification, then sign in.");
+            setIsLogin(true);  // Switch to sign-in form
           }
+          // Clear form
+          setFormData({
+            email: "",
+            password: "",
+            username: "",
+            fullName: "",
+            gender: ""
+          });
         }
       }
     } catch (error) {
