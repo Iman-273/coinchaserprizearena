@@ -15,8 +15,20 @@ const Auth = () => {
 
   const sessionId = searchParams.get("session_id");
 
-  // 🔹 STEP 1: Verify payment (anonymous or logged-in)
+  // 🔐 Detect Supabase email actions (verify / reset password)
+  const authType = searchParams.get("type");
+  const isEmailFlow = authType === "signup" || authType === "recovery";
+
+  /* ================= STEP 1: PAYMENT VERIFICATION ================= */
+
   useEffect(() => {
+    // 👉 If coming from email verification or reset → skip payment check
+    if (isEmailFlow) {
+      setVerifying(false);
+      return;
+    }
+
+    // 👉 Normal auth flow must have payment session
     if (!sessionId) {
       toast.error("Please complete payment first");
       navigate("/offer");
@@ -37,34 +49,37 @@ const Auth = () => {
         return;
       }
 
-      // payment verified (claimed OR unclaimed)
+      // ✅ payment verified (claimed or not)
       setVerifying(false);
     };
 
     verifyPayment();
-  }, [navigate, sessionId]);
+  }, [navigate, sessionId, isEmailFlow]);
 
-  // 🔹 STEP 2: When user signs in → CLAIM payment
+  /* ================= STEP 2: CLAIM PAYMENT AFTER LOGIN ================= */
+
   useEffect(() => {
-    const { data: { subscription } } =
-      supabase.auth.onAuthStateChange(async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
 
-        if (event === "SIGNED_IN" && session?.user && sessionId) {
-          // 🔁 Re-verify to CLAIM payment with user_id
-          await supabase.functions.invoke("verify-website-payment", {
-            body: { session_id: sessionId },
-          });
+      // 👉 Only claim payment in payment flow
+      if (event === "SIGNED_IN" && session?.user && sessionId && !isEmailFlow) {
+        await supabase.functions.invoke("verify-website-payment", {
+          body: { session_id: sessionId },
+        });
 
-          navigate("/");
-        }
-      });
+        navigate("/");
+      }
+    });
 
     return () => subscription.unsubscribe();
-  }, [navigate, sessionId]);
+  }, [navigate, sessionId, isEmailFlow]);
 
-  // 🔄 Loading state
+  /* ================= LOADING UI ================= */
+
   if (verifying) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -73,7 +88,8 @@ const Auth = () => {
     );
   }
 
-  // 🔐 Show signup / signin after successful payment
+  /* ================= AUTH FORM ================= */
+
   return <AuthForm />;
 };
 
