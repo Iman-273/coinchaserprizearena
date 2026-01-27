@@ -30,6 +30,7 @@ interface Tournament {
   first_prize: number;
   second_prize: number;
   third_prize: number;
+  entry_fee: number;
   participants_count?: number;
 }
 
@@ -40,6 +41,7 @@ interface GameScreenProps {
 export const GameScreen = ({ profile }: GameScreenProps) => {
   const [gameStarted, setGameStarted] = useState(false);
   const [gameMode, setGameMode] = useState<"free" | "tournament">("free");
+  const [loading, setLoading] = useState(false);
 
   const [currentTournament, setCurrentTournament] =
     useState<Tournament | null>(null);
@@ -118,35 +120,55 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
   const handleTournamentAction = async () => {
     if (!profile || !currentTournament) return;
 
+    setLoading(true);
+
     try {
       if (!isParticipant) {
-        const { error } = await supabase
-          .from("tournament_participants")
-          .insert({
-            tournament_id: currentTournament.id,
-            user_id: profile.id,
-          });
-
-        if (error) {
-          toast.error("Failed to join tournament");
+        // Get session for authentication
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError || !session) {
+          toast.error("Please sign in to continue");
+          setLoading(false);
           return;
         }
 
-        setIsParticipant(true);
-        setCurrentTournament(prev =>
-          prev
-            ? {
-                ...prev,
-                participants_count: (prev.participants_count || 0) + 1,
-              }
-            : prev
-        );
-      }
+        // Call Stripe payment function for £2 tournament entry
+        const { data, error } = await supabase.functions.invoke('create-tournament-payment', {
+          body: { 
+            tournament_id: currentTournament.id
+          },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          }
+        });
 
-      setGameMode("tournament");
-      setGameStarted(true);
-    } catch {
+        if (error) {
+          console.error('Payment error:', error);
+          toast.error("Payment failed. Please try again.");
+          setLoading(false);
+          return;
+        }
+
+        if (data?.url) {
+          // Open Stripe checkout in a new tab
+          window.open(data.url, '_blank');
+          toast.success("Redirecting to payment...");
+        } else {
+          toast.error("Payment error. Please try again.");
+          setLoading(false);
+          return;
+        }
+      } else {
+        // Already a participant, start tournament game
+        setGameMode("tournament");
+        setGameStarted(true);
+      }
+    } catch (error: any) {
+      console.error('Tournament action error:', error);
       toast.error("Something went wrong");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -213,16 +235,20 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
               : joinWindowEnded
               ? "Join window closed."
               : canJoin
-              ? "Join now and compete!"
+              ? `Join now and compete! (£${currentTournament?.entry_fee} fee)`
               : "Tournament unavailable"}
           </p>
 
           <Button
             onClick={handleTournamentAction}
-            disabled={!canPlayTournament}
+            disabled={!canPlayTournament || loading}
             className="w-full font-black"
           >
-            {isParticipant ? "Start Tournament Game" : "Join Tournament"}
+            {loading
+              ? "Processing..."
+              : isParticipant
+              ? "Start Tournament Game"
+              : `Join Tournament - £${currentTournament?.entry_fee}`}
           </Button>
         </CardContent>
       </Card>
