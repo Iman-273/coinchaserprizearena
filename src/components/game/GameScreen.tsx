@@ -293,7 +293,7 @@ export const GameScreen = ({ profile }: GameScreenProps) => {
             </div>
             <div className="flex items-start gap-3 bg-primary/5 p-3 rounded-lg border border-primary">
               <span className="text-lg">💎</span>
-              <p>Top 3 winners: £150, £100, £50</p>
+              <p>Top 3 winners: £50, £50, £50</p>
             </div>
             <div className="flex items-start gap-3 bg-primary/5 p-3 rounded-lg border border-primary">
               <span className="text-lg">🆓</span>
